@@ -510,6 +510,7 @@ type keyFromPasswordStoreKey struct {
 var keyFromPasswordStore = newKeyValueStore[keyFromPasswordStoreKey, *[keySize]byte]()
 
 func KeyFromPassword(folderID, password string) *[keySize]byte {
+        // test comment
 	storeKey := keyFromPasswordStoreKey{
 		folderID: folderID,
 		password: password,

@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Get Present Languages
         id: get-present-languages
-        run: echo "LANGUAGES=$(curl -s ${{ github.event.repository.languages_url }} | jq -r 'keys[]')" >> $GITHUB_OUTPUT
+        run: echo "LANGUAGES=$(curl -s ${{ github.event.repository.languages_url }} | jq -r 'keys | join(",")')" >> $GITHUB_OUTPUT
 
   getMergeBase:
     name: Get Merge Base

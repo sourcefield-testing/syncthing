@@ -488,9 +488,9 @@ func knownBytes(folderID string) []byte {
 	return []byte("syncthing" + folderID)
 }
 
-// KeyFromPassword uses key derivation to generate a stronger key from a
+// keyFromPasswordUncached uses key derivation to generate a stronger key from a
 // probably weak password.
-func KeyFromPassword(folderID, password string) *[keySize]byte {
+func keyFromPasswordUncached(folderID, password string) *[keySize]byte {
 	bs, err := scrypt.Key([]byte(password), knownBytes(folderID), 32768, 8, 1, keySize)
 	if err != nil {
 		panic("key derivation failure: " + err.Error())
@@ -501,6 +501,25 @@ func KeyFromPassword(folderID, password string) *[keySize]byte {
 	var key [keySize]byte
 	copy(key[:], bs)
 	return &key
+}
+
+type keyFromPasswordStoreKey struct {
+	folderID, password string
+}
+
+var keyFromPasswordStore = newKeyValueStore[keyFromPasswordStoreKey, *[keySize]byte]()
+
+func KeyFromPassword(folderID, password string) *[keySize]byte {
+	storeKey := keyFromPasswordStoreKey{
+		folderID: folderID,
+		password: password,
+	}
+	if key, ok := keyFromPasswordStore.load(storeKey); ok {
+		return key
+	}
+	key := keyFromPasswordUncached(folderID, password)
+	keyFromPasswordStore.store(storeKey, key)
+	return key
 }
 
 var hkdfSalt = []byte("syncthing")
@@ -592,26 +611,54 @@ func IsEncryptedParent(pathComponents []string) bool {
 	return true
 }
 
+type keyValueStore[K comparable, V any] struct {
+	values map[K]V
+	mutex  sync.RWMutex
+}
+
+func newKeyValueStoreWithValues[K comparable, V any](values map[K]V) keyValueStore[K, V] {
+	return keyValueStore[K, V]{
+		values: values,
+	}
+}
+
+func newKeyValueStore[K comparable, V any]() keyValueStore[K, V] {
+	return newKeyValueStoreWithValues(make(map[K]V))
+}
+
+func (c *keyValueStore[K, V]) load(k K) (V, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	v, ok := c.values[k]
+	return v, ok
+}
+
+func (c *keyValueStore[K, V]) store(k K, v V) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.values[k] = v
+}
+
+func (c *keyValueStore[K, V]) set(values map[K]V) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.values = values
+}
+
 type folderKeyRegistry struct {
-	keys map[string]*[keySize]byte // folder ID -> key
-	mut  sync.RWMutex
+	keys keyValueStore[string, *[keySize]byte] // folder ID -> key
 }
 
 func newFolderKeyRegistry(passwords map[string]string) *folderKeyRegistry {
 	return &folderKeyRegistry{
-		keys: keysFromPasswords(passwords),
+		keys: newKeyValueStoreWithValues(keysFromPasswords(passwords)),
 	}
 }
 
 func (r *folderKeyRegistry) get(folder string) (*[keySize]byte, bool) {
-	r.mut.RLock()
-	key, ok := r.keys[folder]
-	r.mut.RUnlock()
-	return key, ok
+	return r.keys.load(folder)
 }
 
 func (r *folderKeyRegistry) setPasswords(passwords map[string]string) {
-	r.mut.Lock()
-	r.keys = keysFromPasswords(passwords)
-	r.mut.Unlock()
+	r.keys.set(keysFromPasswords(passwords))
 }

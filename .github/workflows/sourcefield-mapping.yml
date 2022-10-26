@@ -194,7 +194,7 @@ jobs:
     name: Parse Go Maps
     runs-on: ubuntu-latest
     container:
-      image: "us-docker.pkg.dev/plumbr/sourcefield-public/sourcefield-lsif-go:9a3d4b0"
+      image: "us-docker.pkg.dev/plumbr/sourcefield-public/sourcefield-lsif-go:6fa3da2"
     needs:
       - fetchLanguages
       - getMergeBase
